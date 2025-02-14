@@ -6,6 +6,9 @@
     <title>GoChat - Modern Chat Uygulaması</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@emoji-mart/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@emoji-mart/data"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emoji-mart/js"></script>
     <link href="/static/css/style.css" rel="stylesheet">
 </head>
 <body class="bg-gray-100">
@@ -33,14 +36,23 @@
                 <!-- Mesaj Gönderme Formu -->
                 <div class="border-t p-4">
                     <form id="messageForm" class="flex gap-2">
+                        <button type="button" id="emojiButton" 
+                                class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors flex items-center">
+                            <i class="far fa-smile"></i>
+                        </button>
                         <input type="text" id="messageInput" 
                                class="flex-grow rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:border-blue-500"
                                placeholder="Mesajınızı yazın...">
+                        <label for="fileInput" class="cursor-pointer bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors flex items-center">
+                            <i class="fas fa-paperclip"></i>
+                        </label>
+                        <input type="file" id="fileInput" class="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
                         <button type="submit" 
                                 class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors">
                             <i class="fas fa-paper-plane"></i>
                         </button>
                     </form>
+                    <div id="emojiPicker" class="hidden absolute bottom-20 left-4"></div>
                 </div>
             </div>
         </main>

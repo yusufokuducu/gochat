@@ -13,14 +13,15 @@ import (
 )
 
 func main() {
-	// Veritabanı dizinini oluştur
-	dbDir := "data"
-	if err := os.MkdirAll(dbDir, 0755); err != nil {
-		log.Fatal("Failed to create database directory:", err)
+	// Gerekli dizinleri oluştur
+	for _, dir := range []string{"data", "uploads"} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			log.Fatal("Failed to create directory:", dir, err)
+		}
 	}
 
 	// Veritabanı bağlantısını oluştur
-	db, err := database.NewDatabase(filepath.Join(dbDir, "chat.db"))
+	db, err := database.NewDatabase(filepath.Join("data", "chat.json"))
 	if err != nil {
 		log.Fatal("Failed to initialize database:", err)
 	}
@@ -36,8 +37,9 @@ func main() {
 	// WebSocket handler'ını oluştur
 	wsHandler := handlers.NewWebSocketHandler(hub)
 
-	// Statik dosyalar için klasör ayarı
+	// Statik dosyalar için klasör ayarları
 	router.Static("/static", "./static")
+	router.Static("/uploads", "./uploads")
 	router.LoadHTMLGlob("static/*.html")
 
 	// Ana sayfa

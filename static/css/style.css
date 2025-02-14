@@ -1,0 +1,123 @@
+/* Özel Scroll Bar Stilleri */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Mesaj Kabarcıkları */
+.message {
+    max-width: 70%;
+    padding: 10px 15px;
+    border-radius: 15px;
+    margin: 5px 0;
+    position: relative;
+}
+
+.message.sent {
+    background-color: #4299e1;
+    color: white;
+    margin-left: auto;
+    border-bottom-right-radius: 5px;
+}
+
+.message.received {
+    background-color: #e2e8f0;
+    color: #2d3748;
+    margin-right: auto;
+    border-bottom-left-radius: 5px;
+}
+
+/* Dosya Mesajları */
+.message .message-content img {
+    max-width: 300px;
+    border-radius: 8px;
+    margin: 5px 0;
+    transition: transform 0.2s;
+}
+
+.message .message-content img:hover {
+    transform: scale(1.05);
+}
+
+.message .message-content a {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 12px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    text-decoration: none;
+    transition: background-color 0.2s;
+}
+
+.message.sent .message-content a {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.message .message-content a:hover {
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+.message.sent .message-content a:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+.message .message-content a i {
+    margin-right: 8px;
+}
+
+/* Animasyonlar */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.message {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* Kullanıcı Listesi Stilleri */
+.user-item {
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: background-color 0.2s;
+}
+
+.user-item:hover {
+    background-color: #f7fafc;
+}
+
+.user-item.active {
+    background-color: #ebf8ff;
+    border-left: 3px solid #4299e1;
+}
+
+/* Responsive Tasarım */
+@media (max-width: 768px) {
+    .message {
+        max-width: 85%;
+    }
+
+    .message .message-content img {
+        max-width: 200px;
+    }
+} 
