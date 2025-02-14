@@ -1,0 +1,29 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Output of the go coverage tool
+*.out
+
+# Build output
+bin/
+build/
+
+# Dependency directories
+vendor/
+
+# Editor files
+.vscode/
+.idea/
+
+# Log files
+*.log
+
+# Ignore data directory containing large files such as databases
+/data/
+
+data/chat.db/*.mem
+data/chat.db/*.vlog 
