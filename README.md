@@ -39,7 +39,7 @@ Before running the application, make sure you have the following installed:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/gochat.git
+git clone https://github.com/faust-lvii/gochat.git
 cd gochat
 ```
 
@@ -114,4 +114,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For support, please open an issue in the GitHub repository or contact the maintainers.
 
 ---
-Made with ❤️ by [Your Name]
+
