@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -49,12 +48,32 @@ func NewWebSocketHandler(hub *websocket.Hub) *WebSocketHandler {
 	}
 }
 
-// HandleWebSocket upgrades HTTP connection to WebSocket and manages the connection
-func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
+// ServeWs upgrades HTTP connection to WebSocket and manages the connection
+func (h *WebSocketHandler) ServeWs(c *gin.Context) {
+	// Validate username before upgrading connection
+	username := sanitizeUsername(c.Query("username"))
+	if username == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid username",
+		})
+		return
+	}
+
+	// Check if username is already taken
+	if h.hub.IsUsernameTaken(username) {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "Username is already taken. Please choose another one.",
+		})
+		return
+	}
+
 	// Upgrade HTTP connection to WebSocket
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("Error upgrading to WebSocket: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Could not establish WebSocket connection",
+		})
 		return
 	}
 
@@ -63,24 +82,9 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	conn.SetReadDeadline(time.Now().Add(pongWaitTime))
 	conn.SetWriteDeadline(time.Now().Add(writeWaitTime))
 
-	// Get username from query parameter
-	username := sanitizeUsername(c.Query("username"))
-
-	// Check if username is already taken
-	if h.hub.IsUsernameTaken(username) {
-		// Send error message and close connection
-		closeMessage := websocket.Message{
-			Type:    websocket.MessageTypeError,
-			Content: "Username is already taken. Please choose another one.",
-			Sender:  "System",
-			SentAt:  time.Now(),
-		}
-		
-		messageJSON, _ := json.Marshal(closeMessage)
-		conn.WriteMessage(gorilla.TextMessage, messageJSON)
-		conn.Close()
-		return
-	}
+	// Log connection
+	log.Printf("New WebSocket connection established for user: %s from IP: %s", 
+		username, c.ClientIP())
 
 	// Create new client
 	client := websocket.NewClient(conn, h.hub, username)
@@ -99,7 +103,7 @@ func sanitizeUsername(username string) string {
 	username = strings.TrimSpace(username)
 	
 	// If empty or too short, use default
-	if username == "" || len(username) < minUsernameLength {
+	if len(username) < minUsernameLength {
 		return defaultUsername
 	}
 	
@@ -108,18 +112,13 @@ func sanitizeUsername(username string) string {
 		username = username[:maxUsernameLength]
 	}
 	
-	// Remove any potentially dangerous characters
+	// Remove any potentially harmful characters
 	username = strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
-			return r
+		if r < 32 || r > 126 {
+			return -1 // Remove control characters and non-ASCII
 		}
-		return -1
+		return r
 	}, username)
-	
-	// If after filtering it's empty or too short, use default
-	if username == "" || len(username) < minUsernameLength {
-		return defaultUsername
-	}
 	
 	return username
 }

@@ -4,89 +4,145 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kyusu/gochat/internal/database"
-	"github.com/kyusu/gochat/internal/websocket"
+	"github.com/joho/godotenv"
+	"gochat/internal/handlers"
+	"gochat/internal/websocket"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func main() {
-	// Gerekli dizinleri oluştur
-	for _, dir := range []string{"data", "uploads"} {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			log.Fatal("Failed to create directory:", dir, err)
-		}
+	// Load .env file if it exists
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using environment variables")
 	}
 
-	// Database configuration
-	dbConfig := database.Config{
-		Host:     "localhost",
-		Port:     "5432", 
-		User:     "postgres",
-		Password: "your_db_password",
-		DBName:   "gochat",
-		SSLMode:  "disable",
+	// Configure database connection
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "host=localhost user=postgres password=1122 dbname=gochat port=5432 sslmode=disable TimeZone=Europe/Istanbul"
 	}
 
-	// Initialize database with retry logic
-	var db *gorm.DB
-	var err error
-	
-	for retries := 0; retries < 5; retries++ {
-		db, err = database.NewConnection(dbConfig)
-		if err == nil {
-			break
-		}
-		log.Printf("Database connection attempt %d failed: %v", retries+1, err)
-		time.Sleep(2 * time.Second)
-	}
-	
-	if err != nil {
-		log.Fatal("Failed to connect to database after 5 attempts: ", err)
-	}
-
-	// Perform health check
-	if err := database.HealthCheck(db); err != nil {
-		log.Fatal("Database health check failed: ", err)
-	}
-
-	// Auto-migrate models
-	err = db.AutoMigrate(
-		&websocket.Message{},
-		&websocket.Attachment{},
+	// Configure GORM logger
+	gormLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		logger.Config{
+			SlowThreshold:             time.Second,
+			LogLevel:                  logger.Info,
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  true,
+		},
 	)
+
+	// Connect to database
+	db, err := gorm.Open(postgres.Open(dbURL), &gorm.Config{
+		Logger: gormLogger,
+	})
 	if err != nil {
-		log.Fatal("Failed to auto-migrate database models: ", err)
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// Gin router'ı oluştur
-	router := gin.Default()
+	// Auto migrate database schema
+	err = db.AutoMigrate(&websocket.Message{}, &websocket.Attachment{})
+	if err != nil {
+		log.Fatalf("Failed to migrate database: %v", err)
+	}
 
-	// WebSocket hub'ını başlat
+	log.Println("Database connection established and migrations completed")
+
+	// Create required directories
+	createRequiredDirectories()
+
+	// Create a new hub
 	hub := websocket.NewHub(db)
 	go hub.Run()
 
-	// WebSocket handler'ını oluştur
-	wsHandler := websocket.ServeWs(hub)
+	// Create a new WebSocket handler
+	wsHandler := handlers.NewWebSocketHandler(hub)
 
-	// Statik dosyalar için klasör ayarları
-	router.Static("/static", "./static")
+	// Set up Gin router
+	router := gin.Default()
+
+	// Serve static files
+	router.Static("/css", "./static/css")
+	router.Static("/js", "./static/js")
 	router.Static("/uploads", "./uploads")
-	router.LoadHTMLGlob("static/*.html")
+	router.StaticFile("/", "./static/index.html")
 
-	// Ana sayfa
-	router.GET("/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "index.html", nil)
+	// WebSocket endpoint
+	router.GET("/ws", func(c *gin.Context) {
+		wsHandler.ServeWs(c)
 	})
 
-	// WebSocket endpoint'i
-	router.GET("/ws", wsHandler)
+	// File upload endpoint
+	router.POST("/upload", func(c *gin.Context) {
+		handleFileUpload(c, db)
+	})
 
-	// Sunucuyu başlat
-	log.Println("Server starting at :8080...")
-	if err := router.Run(":8080"); err != nil {
-		log.Fatal("Server failed to start:", err)
+	// Start server
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
+
+	log.Printf("Server starting on http://localhost:%s", port)
+	if err := router.Run(":" + port); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
+}
+
+// createRequiredDirectories creates necessary directories for the application
+func createRequiredDirectories() {
+	directories := []string{
+		"./uploads",
+		"./static/js",
+		"./static/css",
+	}
+	
+	for _, dir := range directories {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			log.Fatalf("Failed to create directory %s: %v", dir, err)
+		}
+	}
+}
+
+// handleFileUpload processes file uploads and saves them to the server
+func handleFileUpload(c *gin.Context, db *gorm.DB) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "No file provided"})
+		return
+	}
+
+	// Generate unique filename
+	filename := time.Now().Format("20060102150405") + "_" + file.Filename
+
+	// Save file to uploads directory
+	if err := c.SaveUploadedFile(file, "./uploads/"+filename); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to save file"})
+		return
+	}
+
+	// Create attachment record
+	attachment := websocket.Attachment{
+		FileName: filename,
+	}
+
+	if err := db.Create(&attachment).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error": "Failed to save attachment to database",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":       true,
+		"filename":      filename,
+		"attachment_id": attachment.ID,
+	})
 }

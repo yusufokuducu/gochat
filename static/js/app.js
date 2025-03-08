@@ -1,397 +1,330 @@
-class ChatApp {
-    constructor() {
-        this.ws = null;
-        this.messageHistory = document.getElementById('messageHistory');
-        this.messageForm = document.getElementById('messageForm');
-        this.messageInput = document.getElementById('messageInput');
-        this.fileInput = document.getElementById('fileInput');
-        this.userList = document.getElementById('userList');
-        this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
-        this.reconnectDelay = 3000;
-        this.username = new URLSearchParams(window.location.search).get('username') || 'Anonim';
-        this.emojiButton = document.getElementById('emojiButton');
-        this.emojiPicker = null;
-        
-        this.setupWebSocket();
-        this.setupEventListeners();
-        this.initEmojiPicker();
-    }
+let ws;
+let username = localStorage.getItem('username');
+let messageHistory = [];
+let onlineUsers = new Set();
+const messageForm = document.getElementById('message-form');
+const messageInput = document.getElementById('message-input');
+const fileInput = document.getElementById('file-input');
+const emojiButton = document.querySelector('.emoji-toggle');
+const emojiPicker = document.querySelector('.emoji-picker');
+const usernameModal = document.getElementById('username-modal');
+const usernameInput = document.getElementById('username-input');
+const usernameSubmit = document.getElementById('username-submit');
+const userList = document.getElementById('user-list');
 
-    setupWebSocket() {
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            this.showSystemMessage('Maksimum yeniden bağlanma denemesi aşıldı. Lütfen sayfayı yenileyin.');
-            return;
-        }
+// Emoji listesi
+const emojis = ['😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘',
+                '😎', '🤓', '🧐', '🤔', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌', '😔', '😪',
+                '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝',
+                '👍', '👎', '👊', '✊', '🤛', '🤜', '🤞', '✌️', '🤟', '🤘', '👌', '👈', '👉', '👆', '👇', '☝️'];
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws?username=${encodeURIComponent(this.username)}`;
-        
-        try {
-            this.ws = new WebSocket(wsUrl);
-            
-            this.ws.onopen = () => {
-                console.log('WebSocket bağlantısı kuruldu');
-                this.showSystemMessage('Sohbete bağlandınız!');
-                this.reconnectAttempts = 0;
-            };
-            
-            this.ws.onmessage = (event) => {
-                try {
-                    const message = JSON.parse(event.data);
-                    this.handleMessage(message);
-                } catch (error) {
-                    console.error('Mesaj işleme hatası:', error);
-                }
-            };
-            
-            this.ws.onclose = (event) => {
-                console.log('WebSocket bağlantısı kapandı:', event.code, event.reason);
-                this.showSystemMessage('Bağlantı kesildi. Yeniden bağlanmaya çalışılıyor...');
-                this.reconnectAttempts++;
-                setTimeout(() => this.setupWebSocket(), this.reconnectDelay);
-            };
-            
-            this.ws.onerror = (error) => {
-                console.error('WebSocket hatası:', error);
-                this.showSystemMessage('Bir bağlantı hatası oluştu!');
-            };
-        } catch (error) {
-            console.error('WebSocket bağlantı hatası:', error);
-            this.showSystemMessage('Bağlantı kurulamadı. Yeniden deneniyor...');
-            this.reconnectAttempts++;
-            setTimeout(() => this.setupWebSocket(), this.reconnectDelay);
-        }
-    }
-
-    setupEventListeners() {
-        this.messageForm.addEventListener('submit', (e) => {
+// Emoji picker'ı oluştur
+function initEmojiPicker() {
+    emojiPicker.innerHTML = '';
+    emojis.forEach(emoji => {
+        const button = document.createElement('button');
+        button.textContent = emoji;
+        button.className = 'emoji-button';
+        button.addEventListener('click', (e) => {
             e.preventDefault();
-            this.sendMessage();
-        });
-
-        this.messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                this.sendMessage();
-            }
-        });
-
-        this.fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                this.sendFile(file);
-            }
-        });
-    }
-
-    async sendFile(file) {
-        if (!file || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-
-        // Dosya boyutu kontrolü (10MB)
-        if (file.size > 10 * 1024 * 1024) {
-            this.showSystemMessage('Dosya boyutu 10MB\'dan büyük olamaz!');
-            return;
-        }
-
-        try {
-            // Yükleniyor mesajı göster
-            const loadingMsg = document.createElement('div');
-            loadingMsg.className = 'text-center text-sm text-gray-500 my-2';
-            loadingMsg.textContent = `${file.name} yükleniyor...`;
-            this.messageHistory.appendChild(loadingMsg);
-            this.scrollToBottom();
-
-            // Dosyayı Base64'e çevir
-            const base64Data = await this.fileToBase64(file);
-            
-            const messageData = {
-                type: 'file',
-                content: base64Data,
-                sender: this.username,
-                timestamp: new Date().toISOString(),
-                fileInfo: {
-                    fileName: file.name,
-                    fileSize: file.size,
-                    fileType: file.type
-                }
-            };
-
-            // WebSocket üzerinden gönder
-            this.ws.send(JSON.stringify(messageData));
-            
-            // Yükleniyor mesajını kaldır
-            this.messageHistory.removeChild(loadingMsg);
-            
-            // Input'u temizle
-            this.fileInput.value = '';
-        } catch (error) {
-            console.error('Dosya gönderme hatası:', error);
-            this.showSystemMessage('Dosya gönderilemedi!');
-        }
-    }
-
-    fileToBase64(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => {
-                const base64String = reader.result.split(',')[1];
-                resolve(base64String);
-            };
-            reader.onerror = (error) => reject(error);
-        });
-    }
-
-    sendMessage() {
-        const content = this.messageInput.value.trim();
-        if (!content || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-
-        const messageData = {
-            type: 'message',
-            content: content,
-            sender: this.username,
-            timestamp: new Date().toISOString()
-        };
-
-        try {
-            this.ws.send(JSON.stringify(messageData));
-            
-            // Mesajı hemen göster
-            this.displayMessage({
-                ...messageData,
-                isSelf: true
-            });
-            
-            this.messageInput.value = '';
-        } catch (error) {
-            console.error('Mesaj gönderme hatası:', error);
-            this.showSystemMessage('Mesaj gönderilemedi!');
-        }
-    }
-
-    handleMessage(message) {
-        console.log('Gelen mesaj:', message);
-        switch (message.type) {
-            case 'message':
-                // Kendi gönderdiğimiz mesajları tekrar gösterme
-                if (message.sender !== this.username) {
-                    this.displayMessage({
-                        ...message,
-                        isSelf: false
-                    });
-                }
-                break;
-            case 'file':
-                // Kendi gönderdiğimiz dosyaları tekrar gösterme
-                if (message.sender !== this.username) {
-                    this.displayMessage({
-                        ...message,
-                        isSelf: false
-                    });
-                }
-                break;
-            case 'user_list':
-                this.updateUserList(message.users);
-                break;
-            case 'system':
-                this.showSystemMessage(message.content);
-                break;
-            case 'typing':
-                this.handleTypingStatus(message);
-                break;
-            default:
-                console.warn('Bilinmeyen mesaj tipi:', message.type);
-        }
-    }
-
-    displayMessage(message) {
-        const messageElement = document.createElement('div');
-        messageElement.className = `message ${message.isSelf ? 'sent' : 'received'}`;
-        
-        const sender = document.createElement('div');
-        sender.className = 'message-sender text-xs text-gray-600 mb-1';
-        sender.textContent = message.sender;
-        
-        const content = document.createElement('div');
-        content.className = 'message-content';
-
-        if (message.type === 'file') {
-            const fileInfo = message.fileInfo;
-            if (fileInfo.fileType.startsWith('image/')) {
-                // Resim dosyası
-                const img = document.createElement('img');
-                img.src = fileInfo.fileURL;
-                img.className = 'max-w-full rounded-lg cursor-pointer';
-                img.onclick = () => window.open(fileInfo.fileURL, '_blank');
-                content.appendChild(img);
-            } else {
-                // Diğer dosya türleri
-                const fileLink = document.createElement('a');
-                fileLink.href = fileInfo.fileURL;
-                fileLink.target = '_blank';
-                fileLink.className = 'flex items-center space-x-2 text-blue-500 hover:text-blue-700';
-                
-                const icon = document.createElement('i');
-                icon.className = 'fas fa-file';
-                fileLink.appendChild(icon);
-                
-                const fileName = document.createElement('span');
-                fileName.textContent = fileInfo.fileName;
-                fileLink.appendChild(fileName);
-                
-                content.appendChild(fileLink);
-            }
-        } else {
-            content.textContent = message.content;
-        }
-        
-        const timestamp = document.createElement('div');
-        timestamp.className = 'message-timestamp text-xs text-gray-500 mt-1';
-        timestamp.textContent = new Date(message.timestamp).toLocaleTimeString();
-        
-        messageElement.appendChild(sender);
-        messageElement.appendChild(content);
-        messageElement.appendChild(timestamp);
-        
-        this.messageHistory.appendChild(messageElement);
-        this.scrollToBottom();
-    }
-
-    getCurrentUsername() {
-        return this.username;
-    }
-
-    updateUserList(users) {
-        this.userList.innerHTML = '';
-        if (typeof users === 'string') {
-            try {
-                users = JSON.parse(users).users;
-            } catch (error) {
-                console.error('Kullanıcı listesi ayrıştırma hatası:', error);
-                return;
-            }
-        }
-        
-        users.forEach(user => {
-            const userElement = document.createElement('div');
-            userElement.className = 'user-item flex items-center space-x-2';
-            
-            const status = document.createElement('span');
-            status.className = `w-2 h-2 rounded-full ${user.online ? 'bg-green-500' : 'bg-gray-400'}`;
-            
-            const name = document.createElement('span');
-            name.textContent = user.name;
-            
-            userElement.appendChild(status);
-            userElement.appendChild(name);
-            this.userList.appendChild(userElement);
-        });
-    }
-
-    showSystemMessage(content) {
-        const messageElement = document.createElement('div');
-        messageElement.className = 'text-center text-sm text-gray-500 my-2';
-        messageElement.textContent = content;
-        this.messageHistory.appendChild(messageElement);
-        this.scrollToBottom();
-    }
-
-    scrollToBottom() {
-        this.messageHistory.scrollTop = this.messageHistory.scrollHeight;
-    }
-
-    handleTypingStatus(message) {
-        const typingIndicator = document.getElementById('typingIndicator');
-        if (!typingIndicator) {
-            const indicator = document.createElement('div');
-            indicator.id = 'typingIndicator';
-            indicator.className = 'text-sm text-gray-500 italic ml-4 mb-2';
-            document.querySelector('.messages').appendChild(indicator);
-        }
-
-        if (message.content && message.sender !== this.username) {
-            typingIndicator.textContent = `${message.sender} yazıyor...`;
-            typingIndicator.classList.remove('hidden');
-        } else {
-            typingIndicator.classList.add('hidden');
-        }
-    }
-
-    initEmojiPicker() {
-        // Emoji picker'ı oluştur
-        this.emojiPicker = document.createElement('div');
-        this.emojiPicker.style.position = 'absolute';
-        this.emojiPicker.style.bottom = '80px';
-        this.emojiPicker.style.left = '20px';
-        this.emojiPicker.style.zIndex = '1000';
-        this.emojiPicker.style.display = 'none';
-        document.body.appendChild(this.emojiPicker);
-
-        // Emoji picker'ı başlat
-        const picker = new EmojiMart.Picker({
-            data: emojiMartData,
-            onEmojiSelect: (emoji) => {
-                const cursorPos = this.messageInput.selectionStart;
-                const text = this.messageInput.value;
-                const newText = text.slice(0, cursorPos) + emoji.native + text.slice(cursorPos);
-                this.messageInput.value = newText;
-                this.messageInput.focus();
-                const newCursorPos = cursorPos + emoji.native.length;
-                this.messageInput.setSelectionRange(newCursorPos, newCursorPos);
-                this.emojiPicker.style.display = 'none';
-            },
-            theme: 'light',
-            set: 'native',
-            showPreview: false,
-            showSkinTones: false,
-            autoFocus: false,
-            maxFrequentRows: 4,
-            perLine: 8
-        });
-
-        this.emojiPicker.appendChild(picker);
-
-        // Emoji butonuna tıklama olayını ekle
-        this.emojiButton.addEventListener('click', (e) => {
             e.stopPropagation();
-            const isVisible = this.emojiPicker.style.display === 'block';
-            this.emojiPicker.style.display = isVisible ? 'none' : 'block';
+            messageInput.value += emoji;
+            toggleEmojiPicker(false);
         });
+        emojiPicker.appendChild(button);
+    });
+}
 
-        // Sayfa tıklamalarını dinle ve emoji picker dışında tıklanırsa kapat
-        document.addEventListener('click', (e) => {
-            if (!this.emojiPicker.contains(e.target) && e.target !== this.emojiButton) {
-                this.emojiPicker.style.display = 'none';
-            }
-        });
+// Emoji picker'ı toggle yapma fonksiyonu
+function toggleEmojiPicker(show) {
+    if (show) {
+        emojiPicker.style.display = 'grid';
+    } else {
+        emojiPicker.style.display = 'none';
     }
 }
 
-// Chat uygulamasını başlat
-document.addEventListener('DOMContentLoaded', () => {
-    window.chatApp = new ChatApp();
+// Emoji picker'ı başlat
+initEmojiPicker();
 
-    // Yazıyor göstergesi
-    let typingTimer;
-    const TYPING_TIMEOUT = 1000;
-
-    document.getElementById('messageInput').addEventListener('input', () => {
-        clearTimeout(typingTimer);
-        sendTypingStatus(true);
-
-        typingTimer = setTimeout(() => {
-            sendTypingStatus(false);
-        }, TYPING_TIMEOUT);
-    });
-
-    function sendTypingStatus(isTyping) {
-        if (window.chatApp.ws.readyState === WebSocket.OPEN) {
-            window.chatApp.ws.send(JSON.stringify({
-                type: 'typing',
-                sender: window.chatApp.getCurrentUsername(),
-                content: isTyping
-            }));
-        }
+// Kullanıcı adı modal'ını göster
+function showUsernameModal() {
+    usernameModal.style.display = 'flex';
+    if (username) {
+        usernameInput.value = username;
     }
-}); 
+    usernameInput.focus();
+}
+
+// Kullanıcı adı modal'ını gizle
+function hideUsernameModal() {
+    usernameModal.style.display = 'none';
+}
+
+// Kullanıcı adı girişi
+usernameSubmit.addEventListener('click', (e) => {
+    e.preventDefault();
+    const newUsername = usernameInput.value.trim();
+    if (newUsername) {
+        if (newUsername.length > 50) {
+            alert('Kullanıcı adı 50 karakterden kısa olmalıdır!');
+            return;
+        }
+        username = newUsername;
+        localStorage.setItem('username', username);
+        hideUsernameModal();
+        // Eğer WebSocket bağlantısı varsa kapat ve yeniden bağlan
+        if (ws) {
+            ws.close();
+        }
+        connectWebSocket();
+    } else {
+        alert('Lütfen geçerli bir kullanıcı adı girin!');
+    }
+});
+
+// Enter tuşu ile kullanıcı adı girişi
+usernameInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        usernameSubmit.click();
+    }
+});
+
+// Sayfa yüklendiğinde kullanıcı adı modal'ını göster
+window.addEventListener('load', () => {
+    if (!username) {
+        showUsernameModal();
+    } else {
+        connectWebSocket();
+    }
+});
+
+// Kullanıcı listesini güncelle
+function updateUserList(users) {
+    userList.innerHTML = '';
+    
+    // Kullanıcıları alfabetik sıraya göre sırala
+    const sortedUsers = Array.from(users).sort();
+    
+    sortedUsers.forEach(user => {
+        const li = document.createElement('li');
+        li.className = 'user-item online';
+        li.innerHTML = `
+            <div class="user-status"></div>
+            <span>${user}</span>
+        `;
+        userList.appendChild(li);
+    });
+}
+
+// WebSocket bağlantısı
+function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws?username=${encodeURIComponent(username)}`;
+    console.log(`WebSocket bağlantısı kuruluyor: ${wsUrl}`);
+    
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+        console.log('WebSocket bağlantısı kuruldu');
+        // Bağlantı kurulduğunda geçmiş mesajları iste
+        const historyRequest = { 
+            type: 'get_history',
+            sender: username,
+            sent_at: new Date().toISOString()
+        };
+        console.log('Mesaj geçmişi isteniyor:', historyRequest);
+        ws.send(JSON.stringify(historyRequest));
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            console.log('Mesaj alındı:', event.data.substring(0, 100) + (event.data.length > 100 ? '...' : ''));
+            const message = JSON.parse(event.data);
+            if (Array.isArray(message)) {
+                // Geçmiş mesajları göster
+                console.log(`${message.length} adet geçmiş mesaj alındı`);
+                messageHistory = [];
+                const chatMessages = document.getElementById('chat-messages');
+                chatMessages.innerHTML = '';
+                message.forEach(msg => {
+                    messageHistory.push(msg);
+                    displayMessage(msg);
+                });
+            } else if (message.type === 'user_list') {
+                // Kullanıcı listesini güncelle
+                console.log('Kullanıcı listesi alındı:', message.users);
+                onlineUsers = new Set(message.users);
+                updateUserList(onlineUsers);
+            } else {
+                console.log('Tekil mesaj alındı:', message.type, message.sender);
+                
+                // Kullanıcı giriş/çıkış mesajlarını işle
+                if (message.type === 'user_joined') {
+                    onlineUsers.add(message.sender);
+                    updateUserList(onlineUsers);
+                } else if (message.type === 'user_left') {
+                    onlineUsers.delete(message.sender);
+                    updateUserList(onlineUsers);
+                }
+                
+                messageHistory.push(message);
+                displayMessage(message);
+            }
+        } catch (error) {
+            console.error('Mesaj işleme hatası:', error);
+        }
+    };
+
+    ws.onclose = (event) => {
+        console.log(`WebSocket bağlantısı kapandı. Kod: ${event.code}, Neden: ${event.reason}`);
+        setTimeout(connectWebSocket, 2000);
+    };
+
+    ws.onerror = (err) => {
+        console.error('WebSocket hatası:', err);
+    };
+}
+
+// Emoji picker toggle işlevi
+let isEmojiPickerVisible = false;
+emojiButton.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isEmojiPickerVisible = !isEmojiPickerVisible;
+    toggleEmojiPicker(isEmojiPickerVisible);
+});
+
+// Sayfanın başka bir yerine tıklandığında emoji picker'ı gizle
+document.addEventListener('click', () => {
+    if (isEmojiPickerVisible) {
+        isEmojiPickerVisible = false;
+        toggleEmojiPicker(false);
+    }
+});
+
+// Emoji picker'ın içine tıklandığında kapanmasını engelle
+emojiPicker.addEventListener('click', (e) => {
+    e.stopPropagation();
+});
+
+// Dosya yükleme işlevi
+fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) throw new Error('Dosya yükleme hatası');
+
+        const result = await response.json();
+        const message = {
+            type: 'message',
+            content: `Dosya gönderildi: ${file.name}`,
+            sender: username,
+            sent_at: new Date().toISOString(),
+            attachments: [{
+                file_url: result.url,
+                file_name: file.name,
+                file_type: file.type
+            }]
+        };
+
+        ws.send(JSON.stringify(message));
+        fileInput.value = ''; // Input'u temizle
+    } catch (error) {
+        console.error('Dosya yükleme hatası:', error);
+        alert('Dosya yüklenirken bir hata oluştu');
+    }
+});
+
+// Enter tuşu ile emoji ekleme sorununu çöz
+messageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        messageForm.dispatchEvent(new Event('submit'));
+    }
+});
+
+// Mesaj gönderme
+messageForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const content = messageInput.value.trim();
+    if (!content) return;
+
+    const message = {
+        type: 'message',
+        content: content,
+        sender: username,
+        sent_at: new Date().toISOString(),
+        attachments: []
+    };
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        // Mesajı WebSocket üzerinden gönder
+        ws.send(JSON.stringify(message));
+        // Input'u temizle
+        messageInput.value = '';
+        // Emoji picker'ı kapat
+        isEmojiPickerVisible = false;
+        toggleEmojiPicker(false);
+    } else {
+        console.error('WebSocket bağlantısı kapalı');
+        alert('Bağlantı hatası! Sayfa yenileniyor...');
+        window.location.reload();
+    }
+});
+
+// Mesajları görüntüleme
+function displayMessage(message) {
+    const chatMessages = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+
+    if (message.type === 'system') {
+        messageDiv.className = 'message system-message';
+        messageDiv.innerHTML = `
+            <div class="message-content">
+                <p>${message.content}</p>
+                <span class="timestamp">${new Date(message.sent_at).toLocaleTimeString()}</span>
+            </div>
+        `;
+    } else {
+        const isOwnMessage = message.sender === username;
+        messageDiv.className = `message ${isOwnMessage ? 'sent' : 'received'}`;
+        
+        let attachmentHtml = '';
+        if (message.attachments && message.attachments.length > 0) {
+            attachmentHtml = message.attachments.map(attachment => {
+                if (attachment.file_type.startsWith('image/')) {
+                    return `<img src="${attachment.file_url}" alt="${attachment.file_name}" class="message-image">`;
+                } else {
+                    return `<a href="${attachment.file_url}" target="_blank" class="file-attachment">
+                        <i class="fas fa-file"></i> ${attachment.file_name}
+                    </a>`;
+                }
+            }).join('');
+        }
+
+        messageDiv.innerHTML = `
+            <div class="message-header">
+                <span class="username">${message.sender}</span>
+                <span class="timestamp">${new Date(message.sent_at).toLocaleTimeString()}</span>
+            </div>
+            <div class="message-content">
+                <p>${message.content}</p>
+                ${attachmentHtml}
+            </div>
+        `;
+    }
+
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
