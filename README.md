@@ -44,7 +44,7 @@ GoChat is a full-featured chat application that enables real-time communication 
 ### Setup and Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/gochat.git
+   git clone https://github.com/faust-lvii/gochat.git
    cd gochat
    ```
 
