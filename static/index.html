@@ -3,368 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GoChat - Real-time Chat Application</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/css/style.css">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f0f2f5;
-        }
-
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            display: flex;
-            flex-direction: column;
-            height: 80vh;
-        }
-
-        .header {
-            padding: 20px;
-            border-bottom: 1px solid #e4e6eb;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-        }
-
-        .username {
-            font-weight: bold;
-            color: #1877f2;
-            margin-right: 10px;
-        }
-
-        .chat-container {
-            display: flex;
-            flex-grow: 1;
-        }
-
-        .users-sidebar {
-            width: 200px;
-            border-right: 1px solid #e4e6eb;
-            padding: 15px;
-            overflow-y: auto;
-        }
-
-        .users-title {
-            font-weight: bold;
-            color: #65676b;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #e4e6eb;
-        }
-
-        .user-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        .user-item {
-            padding: 8px 10px;
-            margin-bottom: 5px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-        }
-
-        .user-item.online {
-            background-color: #e7f3ff;
-        }
-
-        .user-status {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: #31a24c;
-            margin-right: 8px;
-        }
-
-        .main-content {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .chat-messages {
-            flex-grow: 1;
-            overflow-y: auto;
-            padding: 20px;
-        }
-
-        .message {
-            margin-bottom: 15px;
-            max-width: 70%;
-        }
-
-        .message.sent {
-            margin-left: auto;
-        }
-
-        .message.received {
-            margin-right: auto;
-        }
-
-        .message.system-message {
-            margin: 10px auto;
-            text-align: center;
-            max-width: 100%;
-        }
-
-        .system-message .message-content {
-            background-color: #f0f2f5;
-            color: #65676b;
-            padding: 8px 12px;
-            border-radius: 15px;
-            display: inline-block;
-        }
-
-        .message-header {
-            margin-bottom: 5px;
-            font-size: 0.9em;
-        }
-
-        .username {
-            font-weight: bold;
-            color: #1877f2;
-        }
-
-        .timestamp {
-            color: #65676b;
-            font-size: 0.8em;
-            margin-left: 8px;
-        }
-
-        .message-content {
-            background-color: #e4e6eb;
-            padding: 10px 15px;
-            border-radius: 18px;
-            word-wrap: break-word;
-        }
-
-        .sent .message-content {
-            background-color: #0084ff;
-            color: white;
-        }
-
-        .message-image {
-            max-width: 200px;
-            border-radius: 10px;
-            margin-top: 5px;
-            cursor: pointer;
-        }
-
-        .file-attachment {
-            display: inline-block;
-            margin-top: 5px;
-            padding: 8px 12px;
-            background-color: #f0f2f5;
-            border-radius: 8px;
-            text-decoration: none;
-            color: #1877f2;
-        }
-
-        .input-container {
-            padding: 20px;
-            border-top: 1px solid #e4e6eb;
-            background-color: white;
-            border-radius: 0 0 10px 10px;
-        }
-
-        .message-form {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        #message-input {
-            flex-grow: 1;
-            padding: 10px 15px;
-            border: 1px solid #e4e6eb;
-            border-radius: 20px;
-            outline: none;
-            font-size: 1em;
-        }
-
-        button {
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 8px;
-            color: #1877f2;
-            font-size: 1.2em;
-        }
-
-        button:hover {
-            color: #0056b3;
-        }
-
-        .emoji-picker {
-            display: none;
-            position: absolute;
-            bottom: 100%;
-            right: 0;
-            background: white;
-            border: 1px solid #e4e6eb;
-            border-radius: 8px;
-            padding: 10px;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 5px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            z-index: 1000;
-        }
-
-        .emoji-button {
-            font-size: 1.2em;
-            padding: 5px;
-            border-radius: 4px;
-        }
-
-        .emoji-button:hover {
-            background-color: #f0f2f5;
-        }
-
-        .file-input-container {
-            position: relative;
-        }
-
-        #file-input {
-            display: none;
-        }
-
-        /* Login Modal */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 2000;
-        }
-
-        .modal {
-            background-color: white;
-            padding: 30px;
-            border-radius: 10px;
-            width: 300px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-        }
-
-        .modal-header {
-            font-size: 1.2em;
-            margin-bottom: 15px;
-            color: #1877f2;
-            text-align: center;
-        }
-
-        .modal-input {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #e4e6eb;
-            border-radius: 5px;
-            margin-bottom: 15px;
-            font-size: 1em;
-        }
-
-        .modal-button {
-            width: 100%;
-            padding: 10px;
-            background-color: #1877f2;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 1em;
-            cursor: pointer;
-        }
-
-        .modal-button:hover {
-            background-color: #166fe5;
-        }
-    </style>
+    <title>GoChat - Real-Time Chat Application</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <meta name="description" content="GoChat - A modern real-time chat application built with Go">
 </head>
 <body>
     <div class="container">
-        <header class="header">
-            <h1>GoChat</h1>
-            <div class="user-info">
-                <span class="username">Not logged in</span>
+        <!-- Login Container -->
+        <div id="login-container" class="login-container">
+            <div class="login-box">
+                <h1><i class="fas fa-comments"></i> GoChat</h1>
+                <p>A real-time chat application built with Go</p>
+                <div class="login-form">
+                    <input type="text" id="username-input" placeholder="Enter your username" maxlength="20">
+                    <button id="join-btn">Join Chat</button>
+                </div>
             </div>
-        </header>
-        
-        <div class="chat-container">
-            <div class="users-sidebar">
-                <div class="users-title">Online Users</div>
-                <ul id="user-list" class="user-list">
-                    <!-- User list will be populated dynamically -->
-                </ul>
+        </div>
+
+        <!-- Chat Container -->
+        <div id="chat-container" class="chat-container" style="display: none;">
+            <div class="chat-header">
+                <h1><i class="fas fa-comments"></i> GoChat</h1>
+                <div class="user-info">
+                    <span id="current-user"></span>
+                    <button id="logout-btn"><i class="fas fa-sign-out-alt"></i></button>
+                </div>
             </div>
             
-            <div class="main-content">
-                <div id="chat-messages" class="chat-messages">
-                    <!-- Messages will be populated dynamically -->
+            <div class="chat-main">
+                <!-- Users Sidebar -->
+                <div class="sidebar">
+                    <div class="sidebar-header">
+                        <h3><i class="fas fa-users"></i> Online Users</h3>
+                    </div>
+                    <div id="user-list" class="user-list">
+                        <!-- Users will be added here dynamically -->
+                    </div>
                 </div>
                 
-                <form id="message-form" class="message-form">
+                <!-- Chat Area -->
+                <div class="chat-area">
+                    <div id="chat-messages" class="chat-messages">
+                        <!-- Messages will be added here dynamically -->
+                    </div>
+                    
+                    <!-- Message Input -->
                     <div class="message-input-container">
-                        <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
-                        <button type="button" id="emoji-toggle" class="emoji-toggle">
-                            <i class="far fa-smile"></i>
-                        </button>
-                        <div id="emoji-picker" class="emoji-picker">
-                            <!-- Emojis will be populated dynamically -->
-                        </div>
+                        <form id="message-form">
+                            <input type="text" id="message-input" placeholder="Type a message...">
+                            <div class="message-actions">
+                                <label for="file-input" class="file-label" id="file-btn">
+                                    <i class="fas fa-paperclip"></i>
+                                </label>
+                                <input type="file" id="file-input" style="display: none;">
+                                <button type="button" id="emoji-btn"><i class="far fa-smile"></i></button>
+                                <button type="submit"><i class="fas fa-paper-plane"></i></button>
+                            </div>
+                        </form>
                     </div>
-                    
-                    <div class="file-upload">
-                        <label for="file-input" class="file-label">
-                            <i class="fas fa-paperclip"></i>
-                        </label>
-                        <input type="file" id="file-input" accept="image/*,.pdf,.doc,.docx,.txt">
-                    </div>
-                    
-                    <button type="submit" class="send-button">
-                        <i class="fas fa-paper-plane"></i>
-                    </button>
-                </form>
+                </div>
             </div>
         </div>
-    </div>
-    
-    <!-- Login Modal -->
-    <div id="login-modal" class="modal-overlay">
-        <div class="modal">
-            <div class="modal-header">
-                <h2>Welcome to GoChat</h2>
-            </div>
-            <div class="modal-body">
-                <p id="login-message" style="display: none; color: var(--error-color); margin-bottom: 15px;"></p>
-                <form id="login-form">
-                    <div class="form-group">
-                        <label for="username-input">Choose a username</label>
-                        <input type="text" id="username-input" placeholder="Enter your username" required minlength="3" maxlength="20">
-                    </div>
-                    <div class="modal-footer">
-                        <button type="submit" class="btn btn-primary">Join Chat</button>
-                    </div>
-                </form>
-            </div>
+        
+        <!-- Emoji Picker -->
+        <div id="emoji-picker" class="emoji-picker" style="display: none;">
+            <!-- Emojis will be added here dynamically -->
         </div>
     </div>
-    
-    <script src="/js/main.js"></script>
+
+    <!-- JavaScript -->
+    <script src="/static/js/app.js"></script>
 </body>
 </html>

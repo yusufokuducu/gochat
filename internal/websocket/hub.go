@@ -5,221 +5,146 @@ import (
 	"log"
 	"sync"
 	"time"
-
-	"gorm.io/gorm"
 )
 
-// Hub maintains the set of active clients and broadcasts messages to them
+// Hub maintains the set of active clients and broadcasts messages to the clients
 type Hub struct {
 	// Registered clients
-	clients    map[*Client]bool
-	
+	Clients map[*Client]bool
+
 	// Inbound messages from the clients
-	broadcast  chan []byte
-	
+	Broadcast chan *Message
+
 	// Register requests from the clients
-	Register   chan *Client
-	
+	Register chan *Client
+
 	// Unregister requests from clients
-	unregister chan *Client
-	
-	// Database connection
-	db         *gorm.DB
-	
-	// Mutex for thread-safe access to the clients map
-	usersMutex sync.RWMutex
+	Unregister chan *Client
+
+	// User status tracking
+	UserStatus     map[string]bool
+	UserStatusLock sync.RWMutex
 }
 
 // NewHub creates a new hub instance
-func NewHub(db *gorm.DB) *Hub {
+func NewHub() *Hub {
 	return &Hub{
-		broadcast:  make(chan []byte, 256),
-		Register:   make(chan *Client),
-		unregister: make(chan *Client),
-		clients:    make(map[*Client]bool),
-		db:         db,
-		usersMutex: sync.RWMutex{},
+		// Use buffered channels for better performance
+		Broadcast:  make(chan *Message, 256),
+		Register:   make(chan *Client, 32),
+		Unregister: make(chan *Client, 32),
+		Clients:    make(map[*Client]bool),
+		UserStatus: make(map[string]bool),
 	}
 }
 
-// GetMessageHistory retrieves the last 50 messages from the database
-func (h *Hub) GetMessageHistory() ([]Message, error) {
-	var messages []Message
-	
-	// Query messages with their attachments
-	err := h.db.Order("sent_at desc").Limit(50).
-		Preload("Attachments").
-		Find(&messages).Error
-	
-	if err != nil {
-		return nil, err
-	}
-	
-	// Reverse the order so oldest messages come first
-	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
-		messages[i], messages[j] = messages[j], messages[i]
-	}
-	
-	return messages, nil
-}
-
-// GetOnlineUsers returns a list of all online users
-func (h *Hub) GetOnlineUsers() []string {
-	h.usersMutex.RLock()
-	defer h.usersMutex.RUnlock()
-	
-	users := make([]string, 0, len(h.clients))
-	for client := range h.clients {
-		users = append(users, client.Name)
-	}
-	return users
-}
-
-// IsUsernameTaken checks if a username is already in use
-func (h *Hub) IsUsernameTaken(username string) bool {
-	h.usersMutex.RLock()
-	defer h.usersMutex.RUnlock()
-	
-	for client := range h.clients {
-		if client.Name == username {
-			return true
-		}
-	}
-	return false
-}
-
-// broadcastUserList sends the current user list to all clients
-func (h *Hub) broadcastUserList() {
-	users := h.GetOnlineUsers()
-	userListMsg := struct {
-		Type  string   `json:"type"`
-		Users []string `json:"users"`
-	}{
-		Type:  "user_list",
-		Users: users,
-	}
-	
-	messageJSON, err := json.Marshal(userListMsg)
-	if err != nil {
-		log.Printf("Error marshaling user list: %v", err)
-		return
-	}
-	
-	h.broadcast <- messageJSON
-}
-
-// broadcastSystemMessage sends a system message to all clients
-func (h *Hub) broadcastSystemMessage(content string) {
-	systemMsg := Message{
-		Type:    MessageTypeSystem,
-		Content: content,
-		Sender:  "System",
-		SentAt:  time.Now(),
-	}
-	
-	// Save system message to database
-	if err := h.db.Create(&systemMsg).Error; err != nil {
-		log.Printf("Error saving system message: %v", err)
-	}
-	
-	messageJSON, err := json.Marshal(systemMsg)
-	if err != nil {
-		log.Printf("Error marshaling system message: %v", err)
-		return
-	}
-	
-	h.broadcast <- messageJSON
-}
-
-// Run starts the hub's main loop
+// Run starts the hub and handles client connections and messages
 func (h *Hub) Run() {
-	log.Println("Starting WebSocket hub")
-	
 	for {
 		select {
 		case client := <-h.Register:
-			// Register new client
-			h.usersMutex.Lock()
-			h.clients[client] = true
-			h.usersMutex.Unlock()
+			log.Printf("Registering client: %s (total clients: %d)", client.Username, len(h.Clients)+1)
+			h.Clients[client] = true
 			
-			log.Printf("Client registered: %s (total: %d)", client.Name, len(h.clients))
+			// Update user status
+			h.UserStatusLock.Lock()
+			h.UserStatus[client.Username] = true
+			h.UserStatusLock.Unlock()
 			
-			// Send welcome message to the new client
-			welcomeMsg := Message{
+			// Broadcast user joined message
+			joinMsg := &Message{
 				Type:    MessageTypeSystem,
-				Content: "Welcome to the chat!",
+				Content: client.Username + " has joined the chat",
 				Sender:  "System",
 				SentAt:  time.Now(),
 			}
-			welcomeJSON, _ := json.Marshal(welcomeMsg)
-			client.send <- welcomeJSON
+			h.Broadcast <- joinMsg
 			
-			// Send user list to the new client
-			h.sendUserListToClient(client)
+			// Send current online users to the new client
+			go h.sendUserStatus(client)
 			
-			// Broadcast user joined message
-			h.broadcastSystemMessage(client.Name + " has joined the chat")
-			
-			// Broadcast updated user list to all clients
-			h.broadcastUserList()
-			
-		case client := <-h.unregister:
-			// Unregister client
-			h.usersMutex.Lock()
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
-				close(client.send)
-				log.Printf("Client unregistered: %s (total: %d)", client.Name, len(h.clients))
+		case client := <-h.Unregister:
+			if _, ok := h.Clients[client]; ok {
+				log.Printf("Unregistering client: %s (remaining clients: %d)", client.Username, len(h.Clients)-1)
+				delete(h.Clients, client)
+				close(client.Send)
+				
+				// Update user status
+				h.UserStatusLock.Lock()
+				delete(h.UserStatus, client.Username)
+				h.UserStatusLock.Unlock()
 				
 				// Broadcast user left message
-				h.broadcastSystemMessage(client.Name + " has left the chat")
-				
-				// Broadcast updated user list
-				h.broadcastUserList()
+				leftMsg := &Message{
+					Type:    MessageTypeSystem,
+					Content: client.Username + " has left the chat",
+					Sender:  "System",
+					SentAt:  time.Now(),
+				}
+				h.Broadcast <- leftMsg
 			}
-			h.usersMutex.Unlock()
 			
-		case message := <-h.broadcast:
+		case message := <-h.Broadcast:
+			// Log the message being broadcast
+			msgJSON, _ := json.Marshal(message)
+			log.Printf("Broadcasting message: %s to %d clients", string(msgJSON), len(h.Clients))
+			
 			// Broadcast message to all clients
-			h.usersMutex.RLock()
-			for client := range h.clients {
+			for client := range h.Clients {
 				select {
-				case client.send <- message:
+				case client.Send <- message:
 					// Message sent successfully
 				default:
-					// Client's send buffer is full, unregister client
-					h.usersMutex.RUnlock()
-					h.usersMutex.Lock()
-					close(client.send)
-					delete(h.clients, client)
-					h.usersMutex.Unlock()
-					h.usersMutex.RLock()
+					// Client's send buffer is full, assume they're gone
+					log.Printf("Client %s send buffer full, closing connection", client.Username)
+					close(client.Send)
+					delete(h.Clients, client)
 					
-					log.Printf("Client buffer full, unregistered: %s", client.Name)
+					// Update user status
+					h.UserStatusLock.Lock()
+					delete(h.UserStatus, client.Username)
+					h.UserStatusLock.Unlock()
 				}
 			}
-			h.usersMutex.RUnlock()
 		}
 	}
 }
 
-// sendUserListToClient sends the current user list to a specific client
-func (h *Hub) sendUserListToClient(client *Client) {
+// GetOnlineUsers returns a list of currently online users
+func (h *Hub) GetOnlineUsers() []UserStatus {
+	h.UserStatusLock.RLock()
+	defer h.UserStatusLock.RUnlock()
+	
+	users := make([]UserStatus, 0, len(h.UserStatus))
+	for username, online := range h.UserStatus {
+		users = append(users, UserStatus{
+			Username: username,
+			Online:   online,
+		})
+	}
+	
+	return users
+}
+
+// sendUserStatus sends the current online users to a client
+func (h *Hub) sendUserStatus(client *Client) {
+	// Get online users
 	users := h.GetOnlineUsers()
-	userListMsg := struct {
-		Type  string   `json:"type"`
-		Users []string `json:"users"`
-	}{
-		Type:  "user_list",
-		Users: users,
+	
+	// Create a message with the user status
+	statusMessage := &Message{
+		Type:    MessageTypeSystem,
+		Content: "userStatus",
+		Sender:  "System",
+		SentAt:  time.Now(),
+		Data:    users, // Add the users data to the message
 	}
 	
-	messageJSON, err := json.Marshal(userListMsg)
-	if err != nil {
-		log.Printf("Error marshaling user list for client %s: %v", client.Name, err)
-		return
+	// Send to the client with timeout
+	select {
+	case client.Send <- statusMessage:
+		log.Println("Sent user status to client:", client.Username)
+	case <-time.After(5 * time.Second):
+		log.Println("Timeout sending user status to client:", client.Username)
 	}
-	
-	client.send <- messageJSON
 }

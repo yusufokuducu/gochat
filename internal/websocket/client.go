@@ -3,10 +3,7 @@ package websocket
 import (
 	"encoding/json"
 	"log"
-	"net/http"
-	"strings"
 	"time"
-	"unicode"
 
 	"github.com/gorilla/websocket"
 )
@@ -14,280 +11,164 @@ import (
 const (
 	// Time allowed to write a message to the peer
 	writeWait = 10 * time.Second
-	
+
 	// Time allowed to read the next pong message from the peer
 	pongWait = 60 * time.Second
-	
-	// Send pings to peer with this period (must be less than pongWait)
+
+	// Send pings to peer with this period. Must be less than pongWait
 	pingPeriod = (pongWait * 9) / 10
-	
+
 	// Maximum message size allowed from peer
 	maxMessageSize = 512 * 1024 // 512KB
-	
-	// Maximum number of reconnection attempts
-	maxRetryCount = 5
-	
-	// Interval between reconnection attempts
-	retryInterval = 3 * time.Second
 )
 
-// Upgrader upgrades HTTP connections to WebSocket connections
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		// Allow all origins in development environment
-		return true
-	},
-}
+var (
+	newline = []byte{'\n'}
+	space   = []byte{' '}
+)
 
-// Client represents a connected chat user
+// Client is a middleman between the websocket connection and the hub
 type Client struct {
-	hub         *Hub
-	conn        *websocket.Conn
-	send        chan []byte
-	Name        string
-	retryCount  int
-	isConnected bool
-	lastActivity time.Time
+	Hub *Hub
+
+	// The websocket connection
+	Conn *websocket.Conn
+
+	// Buffered channel of outbound messages
+	Send chan *Message
+
+	// User information
+	Username string
 }
 
 // NewClient creates a new client instance
-func NewClient(conn *websocket.Conn, hub *Hub, username string) *Client {
+func NewClient(hub *Hub, conn *websocket.Conn, username string) *Client {
 	return &Client{
-		hub:         hub,
-		conn:        conn,
-		send:        make(chan []byte, 256),
-		Name:        username,
-		retryCount:  0,
-		isConnected: true,
-		lastActivity: time.Now(),
+		Hub:      hub,
+		Conn:     conn,
+		Send:     make(chan *Message, 256),
+		Username: username,
 	}
 }
 
-// ReadPump pumps messages from the WebSocket connection to the hub
+// ReadPump pumps messages from the websocket connection to the hub
 func (c *Client) ReadPump() {
 	defer func() {
-		log.Printf("Client %s disconnected, cleaning up", c.Name)
-		c.hub.unregister <- c
-		c.conn.Close()
-		c.isConnected = false
+		c.Hub.Unregister <- c
+		c.Conn.Close()
+		log.Printf("ReadPump stopped for client: %s", c.Username)
 	}()
 
-	c.conn.SetReadLimit(maxMessageSize)
-	c.conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.conn.SetPongHandler(func(string) error {
-		c.conn.SetReadDeadline(time.Now().Add(pongWait))
-		c.lastActivity = time.Now()
+	c.Conn.SetReadLimit(maxMessageSize)
+	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.Conn.SetPongHandler(func(string) error {
+		c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+		log.Printf("Received pong from client: %s", c.Username)
 		return nil
 	})
 
+	// Send a test message to confirm connection
+	testMsg := &Message{
+		Type:    MessageTypeSystem,
+		Content: "Connection established",
+		Sender:  "System",
+		SentAt:  time.Now(),
+	}
+	c.Send <- testMsg
+	log.Printf("Sent test message to client: %s", c.Username)
+
 	for {
-		_, rawMessage, err := c.conn.ReadMessage()
+		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error for user %s: %v", c.Name, err)
+				log.Printf("Unexpected close error from client %s: %v", c.Username, err)
+			} else {
+				log.Printf("Normal close from client %s: %v", c.Username, err)
 			}
 			break
 		}
-		
-		c.lastActivity = time.Now()
 
-		// Parse and validate message
-		var msg Message
-		if err := json.Unmarshal(rawMessage, &msg); err != nil {
-			log.Printf("Error parsing message from user %s: %v", c.Name, err)
-			errorMsg := Message{
-				Type:    MessageTypeError,
-				Content: "Invalid message format",
-				Sender:  "System",
-				SentAt:  time.Now(),
-			}
-			errorJSON, _ := json.Marshal(errorMsg)
-			c.send <- errorJSON
+		log.Printf("Received message from client %s: %s", c.Username, string(message))
+
+		// Parse the message
+		var clientMsg ClientMessage
+		if err := json.Unmarshal(message, &clientMsg); err != nil {
+			log.Printf("Error parsing message from client %s: %v", c.Username, err)
 			continue
 		}
 
-		// Set sender to client's name to prevent spoofing
-		msg.Sender = c.Name
-		msg.SentAt = time.Now()
-
-		// Handle different message types
-		switch msg.Type {
-		case "get_history":
-			log.Printf("User %s requested message history", c.Name)
-			messages, err := c.hub.GetMessageHistory()
-			if err != nil {
-				log.Printf("Error getting message history for user %s: %v", c.Name, err)
-				errorMsg := Message{
-					Type:    MessageTypeError,
-					Content: "Failed to retrieve message history",
-					Sender:  "System",
-					SentAt:  time.Now(),
-				}
-				errorJSON, _ := json.Marshal(errorMsg)
-				c.send <- errorJSON
-				continue
-			}
-
-			// Send each message to the client
-			for _, historyMsg := range messages {
-				msgJSON, _ := json.Marshal(historyMsg)
-				c.send <- msgJSON
-			}
-
-		case MessageTypeText:
-			// Validate message content
-			if strings.TrimSpace(msg.Content) == "" {
-				continue // Ignore empty messages
-			}
-
-			// Sanitize message content
-			msg.Content = sanitizeMessage(msg.Content)
-
-			// Save message to database
-			if err := c.hub.db.Create(&msg).Error; err != nil {
-				log.Printf("Error saving message from user %s: %v", c.Name, err)
-			}
-
-			// Broadcast message to all clients
-			msgJSON, _ := json.Marshal(msg)
-			c.hub.broadcast <- msgJSON
-
-		case MessageTypeFile:
-			// File messages are handled separately in the upload handler
-			// We just broadcast the message here
-			msgJSON, _ := json.Marshal(msg)
-			c.hub.broadcast <- msgJSON
+		// Create a new message to broadcast
+		msg := &Message{
+			Type:    clientMsg.Type,
+			Content: clientMsg.Content,
+			Sender:  c.Username,
+			SentAt:  time.Now(),
 		}
+
+		// Broadcast the message
+		c.Hub.Broadcast <- msg
+		log.Printf("Message from client %s queued for broadcast", c.Username)
 	}
 }
 
-// WritePump pumps messages from the hub to the WebSocket connection
+// WritePump pumps messages from the hub to the websocket connection
 func (c *Client) WritePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		c.conn.Close()
+		c.Conn.Close()
+		log.Printf("WritePump stopped for client: %s", c.Username)
 	}()
 
 	for {
 		select {
-		case message, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+		case message, ok := <-c.Send:
+			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				// The hub closed the channel
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				log.Printf("Hub closed channel for client: %s", c.Username)
+				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
-			w, err := c.conn.NextWriter(websocket.TextMessage)
+			// Marshal the message to JSON
+			jsonMessage, err := json.Marshal(message)
 			if err != nil {
+				log.Printf("Error marshaling message for client %s: %v", c.Username, err)
+				continue
+			}
+
+			// Write the message as JSON
+			w, err := c.Conn.NextWriter(websocket.TextMessage)
+			if err != nil {
+				log.Printf("Error getting writer for client %s: %v", c.Username, err)
 				return
 			}
-			w.Write(message)
+
+			w.Write(jsonMessage)
+			log.Printf("Message sent to client %s: %s", c.Username, string(jsonMessage))
 
 			// Add queued messages to the current websocket message
-			n := len(c.send)
+			n := len(c.Send)
 			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-c.send)
+				w.Write(newline)
+				nextMsg := <-c.Send
+				nextJSON, _ := json.Marshal(nextMsg)
+				w.Write(nextJSON)
+				log.Printf("Additional message sent to client %s: %s", c.Username, string(nextJSON))
 			}
 
 			if err := w.Close(); err != nil {
+				log.Printf("Error closing writer for client %s: %v", c.Username, err)
 				return
 			}
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Printf("Error sending ping to client %s: %v", c.Username, err)
 				return
 			}
-			
-			// Check for client inactivity
-			if time.Since(c.lastActivity) > pongWait*2 {
-				log.Printf("Client %s inactive for too long, disconnecting", c.Name)
-				return
-			}
+			log.Printf("Ping sent to client: %s", c.Username)
 		}
 	}
-}
-
-// sanitizeMessage cleans up message content
-func sanitizeMessage(message string) string {
-	// Trim whitespace
-	message = strings.TrimSpace(message)
-	
-	// Limit message length to prevent abuse
-	const maxLength = 2000
-	if len(message) > maxLength {
-		message = message[:maxLength]
-	}
-	
-	// Remove control characters
-	message = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) && r != '\n' && r != '\t' {
-			return -1
-		}
-		return r
-	}, message)
-	
-	return message
-}
-
-// ServeWs handles WebSocket requests from clients
-func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
-	// Validate username
-	username := r.URL.Query().Get("username")
-	username = strings.TrimSpace(username)
-	if username == "" {
-		log.Println("Username is required")
-		http.Error(w, "Username is required", http.StatusBadRequest)
-		return
-	}
-
-	// Validate username format
-	if !isValidUsername(username) {
-		log.Printf("Invalid username format: %s", username)
-		http.Error(w, "Invalid username format. Use only letters, numbers, and underscores.", http.StatusBadRequest)
-		return
-	}
-
-	// Check if username is already taken
-	if hub.IsUsernameTaken(username) {
-		log.Printf("Username already taken: %s", username)
-		http.Error(w, "Username already taken", http.StatusConflict)
-		return
-	}
-
-	// Upgrade HTTP connection to WebSocket
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Printf("Error upgrading connection: %v", err)
-		return
-	}
-
-	// Create new client
-	client := NewClient(conn, hub, username)
-
-	// Register client with hub
-	hub.Register <- client
-
-	// Start client goroutines
-	go client.WritePump()
-	go client.ReadPump()
-}
-
-// isValidUsername checks if a username contains only valid characters
-func isValidUsername(username string) bool {
-	if len(username) < 3 || len(username) > 20 {
-		return false
-	}
-	
-	for _, r := range username {
-		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' {
-			return false
-		}
-	}
-	
-	return true
 }
