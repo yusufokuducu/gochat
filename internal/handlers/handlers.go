@@ -146,6 +146,7 @@ func UploadHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"file":    file.Filename,
+		"filePath": filename,
 	})
 }
 

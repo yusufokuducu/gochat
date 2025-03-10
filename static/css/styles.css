@@ -293,6 +293,77 @@ body {
     cursor: pointer;
 }
 
+.file-preview {
+    margin-top: 10px;
+    border-radius: 5px;
+    overflow: hidden;
+    max-width: 100%;
+}
+
+.file-preview img {
+    max-width: 100%;
+    max-height: 200px;
+    display: block;
+}
+
+/* Emoji Picker */
+.emoji-picker {
+    position: absolute;
+    bottom: 80px;
+    right: 20px;
+    background-color: white;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+    width: 300px;
+    max-height: 300px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.emoji-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    padding: 5px;
+    background-color: #f8f9fa;
+}
+
+.emoji-tab {
+    padding: 5px 10px;
+    cursor: pointer;
+    border-radius: 5px;
+    margin-right: 5px;
+    font-size: 18px;
+    text-align: center;
+}
+
+.emoji-tab.active {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.emoji-container {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 5px;
+    padding: 10px;
+    overflow-y: auto;
+    max-height: 250px;
+}
+
+.emoji {
+    font-size: 24px;
+    cursor: pointer;
+    text-align: center;
+    padding: 5px;
+    border-radius: 5px;
+}
+
+.emoji:hover {
+    background-color: var(--background-color);
+}
+
 /* Message Input */
 .message-input-container {
     padding: 15px;
@@ -341,36 +412,6 @@ body {
     width: 40px;
     height: 40px;
     border-radius: 50%;
-}
-
-/* Emoji Picker */
-.emoji-picker {
-    position: absolute;
-    bottom: 80px;
-    right: 20px;
-    background-color: white;
-    border-radius: 10px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-    z-index: 100;
-    width: 300px;
-    max-height: 300px;
-    padding: 15px;
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 5px;
-    overflow-y: auto;
-}
-
-.emoji {
-    font-size: 24px;
-    cursor: pointer;
-    text-align: center;
-    padding: 5px;
-    border-radius: 5px;
-}
-
-.emoji:hover {
-    background-color: var(--background-color);
 }
 
 /* Responsive Styles */

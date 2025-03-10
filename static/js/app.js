@@ -43,7 +43,12 @@ function init() {
     }
     
     if (fileInput && fileBtn) {
-        fileBtn.addEventListener('click', () => fileInput.click());
+        // Fix: Use a single event handler to prevent double file selection
+        fileBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            fileInput.click();
+        });
         fileInput.addEventListener('change', handleFileUpload);
     }
     
@@ -333,7 +338,24 @@ function handleFileUpload() {
     })
     .then(data => {
         console.log('Upload successful:', data);
-        addSystemMessage(`File uploaded: ${file.name}`);
+        
+        // Create a local file message to display immediately
+        // This ensures the file appears in the chat without waiting for WebSocket
+        const fileMessage = {
+            type: 'file',
+            content: `${username} shared a file: ${file.name}`,
+            sender: username,
+            sentAt: new Date().toISOString(),
+            attachments: [{
+                fileName: file.name,
+                fileSize: file.size,
+                fileType: file.type,
+                filePath: data.filePath || `${Date.now()}_${file.name}` // Use server path if available
+            }]
+        };
+        
+        // Add file message to chat
+        addFileMessage(fileMessage);
     })
     .catch(error => {
         console.error('Upload error:', error);
@@ -418,7 +440,7 @@ function addFileMessage(message) {
     
     // Create message element
     const messageElement = document.createElement('div');
-    messageElement.className = `message file-message ${isCurrentUser ? 'user-message' : ''}`;
+    messageElement.className = `message ${isCurrentUser ? 'user-message' : ''}`;
     
     // Format timestamp
     let timestamp = '';
@@ -440,6 +462,13 @@ function addFileMessage(message) {
         const fileURL = `/uploads/${attachment.filePath}`;
         const fileIcon = getFileIcon(attachment.fileType);
         
+        // Check if it's an image file
+        const isImage = attachment.fileType.startsWith('image/');
+        const imagePreview = isImage ? 
+            `<div class="file-preview">
+                <img src="${fileURL}" alt="${attachment.fileName}" />
+            </div>` : '';
+        
         fileHTML = `
             <div class="file-attachment">
                 <i class="${fileIcon}"></i>
@@ -451,6 +480,7 @@ function addFileMessage(message) {
                     <i class="fas fa-download"></i>
                 </a>
             </div>
+            ${imagePreview}
         `;
     }
     
@@ -502,6 +532,13 @@ function toggleEmojiPicker() {
         return;
     }
     
+    // Position the emoji picker near the emoji button
+    if (emojiBtn) {
+        const btnRect = emojiBtn.getBoundingClientRect();
+        emojiPicker.style.bottom = `${window.innerHeight - btnRect.top + 10}px`;
+        emojiPicker.style.right = `${window.innerWidth - btnRect.right + 30}px`;
+    }
+    
     const isVisible = emojiPicker.style.display === 'grid';
     emojiPicker.style.display = isVisible ? 'none' : 'grid';
 }
@@ -550,29 +587,90 @@ function createEmojiPicker() {
         return;
     }
     
-    const emojis = ['😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆', '😉', '😊', '😋', '😎', '😍', '😘', '🥰', '😗', '😙', '😚', '🙂', '🤗', '🤩', '🤔', '🤨', '😐', '😑', '😶', '🙄', '😏', '😣', '😥', '😮', '🤐', '😯', '😪', '😫', '😴', '😌', '😛', '😜', '😝', '🤤', '😒', '😓', '😔', '😕', '🙃', '🤑', '😲', '☹️', '🙁', '😖', '😞', '😟', '😤', '😢', '😭', '😦', '😧', '😨', '😩', '🤯', '😬', '😰', '😱', '🥵', '🥶', '😳', '🤪', '😵', '😡', '😠', '🤬', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '😇', '🥳', '🥴', '🥺', '🤠', '🤡', '🤥', '🤫', '🤭', '🧐', '🤓', '😈', '👿', '👹', '👺', '💀', '👻', '👽', '🤖', '💩', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾'];
+    // More comprehensive emoji list with categories
+    const emojiCategories = {
+        'Smileys & Emotion': ['😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆', '😉', '😊', '😋', '😎', '😍', '😘', '🥰', '😗', '😙', '😚', '🙂', '🤗', '🤩', '🤔', '🤨', '😐', '😑', '😶', '🙄', '😏', '😣', '😥', '😮', '🤐', '😯', '😪', '😫', '😴', '😌', '😛', '😜', '😝', '🤤', '😒', '😓', '😔', '😕', '🙃', '🤑', '😲', '☹️', '🙁', '😖', '😞', '😟', '😤', '😢', '😭', '😦', '😧', '😨', '😩', '🤯', '😬', '😰', '😱', '🥵', '🥶', '😳', '🤪', '😵', '😡', '😠', '🤬', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '😇', '🥳', '🥴', '🥺', '🤠', '🤡', '🤥', '🤫', '🤭', '🧐', '🤓', '😈', '👿', '👹', '👺', '💀', '👻', '👽', '🤖', '💩', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾'],
+        'People & Body': ['👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦾', '🦵', '🦿', '🦶', '👂', '🦻', '👃', '🧠', '👣', '🫀', '🫁', '🦷', '🦴', '👀', '👁️', '👅', '👄', '💋'],
+        'Animals & Nature': ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐻‍❄️', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🙈', '🙉', '🙊', '🐒', '🦆', '🦅', '🦉', '🦇', '🐺', '🐗', '🐴', '🦄', '🐝', '🪱', '🐛', '🦋', '🐌', '🐞', '🐜', '🪰', '🪲', '🪳', '🦟', '🦗', '🕷️', '🕸️', '🦂', '🐢', '🐍', '🦎', '🦖', '🦕', '🐙', '🦑', '🦐', '🦞', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳', '🐋', '🦈', '🐊', '🐅', '🐆', '🦓', '🦍', '🦧', '🦣', '🐘', '🦛', '🦏', '🐪', '🐫', '🦒', '🦘', '🦬', '🐃', '🐂', '🐄', '🐎', '🐖', '🐏', '🐑', '🦙', '🐐', '🦌', '🐕', '🐩', '🦮', '🐕‍🦺', '🐈', '🐈‍⬛', '🪶', '🐓', '🦃', '🦤', '🦚', '🦜', '🦢', '🦩', '🕊️', '🐇', '🦝', '🦨', '🦡', '🦫', '🦦', '🦥', '🐁', '🐀', '🐿️', '🦔'],
+        'Food & Drink': ['🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️', '🫑', '🌽', '🥕', '🧄', '🧅', '🥔', '🍠', '🥐', '🥯', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈', '🥞', '🧇', '🥓', '🥩', '🍗', '🍖', '🌭', '🍔', '🍟', '🍕', '🥪', '🥙', '🧆', '🌮', '🌯', '🫔', '🥗', '🥘', '🫕', '🥫', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚', '🍘', '🍥', '🥠', '🥮', '🍢', '🍡', '🍧', '🍨', '🍦', '🥧', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬', '🍫', '🍿', '🍩', '🍪', '🌰', '🥜', '🍯', '🥛', '🍼', '☕', '🫖', '🍵', '🍶', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🧉', '🧊'],
+        'Objects': ['⌚', '📱', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '🖲️', '🕹️', '🗜️', '💽', '💾', '💿', '📀', '📼', '📷', '📸', '📹', '🎥', '📽️', '🎞️', '📞', '☎️', '📟', '📠', '📺', '📻', '🎙️', '🎚️', '🎛️', '🧭', '⏱️', '⏲️', '⏰', '🕰️', '⌛', '⏳', '📡', '🔋', '🔌', '💡', '🔦', '🕯️', '🪔', '🧯', '🛢️', '💸', '💵', '💴', '💶', '💷', '🪙', '💰', '💳', '💎', '⚖️', '🪜', '🧰', '🪛', '🔧', '🔨', '⚒️', '🛠️', '⛏️', '🪚', '🔩', '⚙️', '🪤', '🧱', '⛓️', '🧲', '🔫', '💣', '🧨', '🪓', '🔪', '🗡️', '⚔️', '🛡️', '🚬', '⚰️', '⚱️', '🏺', '🔮', '📿', '🧿', '💈', '⚗️', '🔭', '🔬', '🕳️', '🩹', '🩺', '💊', '💉', '🩸', '🧬', '🦠', '🧫', '🧪', '🌡️', '🧹', '🪠', '🧺', '🧻', '🚽', '🚰', '🚿', '🛁', '🛀', '🧼', '🪥', '🪒', '🧽', '🪣', '🧴', '🛎️', '🔑', '🗝️', '🚪', '🪑', '🛋️', '🛏️', '🛌', '🧸', '🪆', '🖼️', '🪞', '🪟', '🛍️', '🛒', '🎁', '🎈', '🎏', '🎀', '🪄', '🪅', '🎊', '🎉', '🎎', '🏮', '🎐', '🧧', '✉️', '📩', '📨', '📧', '💌', '📥', '📤', '📦', '🏷️', '📪', '📫', '📬', '📭', '📮', '📯', '📜', '📃', '📄', '📑', '🧾', '📊', '📈', '📉', '🗒️', '🗓️', '📆', '📅', '🗑️', '📇', '🗃️', '🗳️', '🗄️', '📋', '📁', '📂', '🗂️', '🗞️', '📰', '📓', '📔', '📒', '📕', '📗', '📘', '📙', '📚', '📖', '🔖', '🧷', '🔗', '📎', '🖇️', '📐', '📏', '🧮', '📌', '📍', '✂️', '🖊️', '🖋️', '✒️', '🖌️', '🖍️', '📝', '✏️', '🔍', '🔎', '🔏', '🔐', '🔒', '🔓']
+    };
     
     // Clear emoji picker
     emojiPicker.innerHTML = '';
     
-    // Add emojis to picker
-    emojis.forEach(emoji => {
-        const emojiElement = document.createElement('div');
-        emojiElement.className = 'emoji';
-        emojiElement.textContent = emoji;
+    // Add category tabs
+    const tabsContainer = document.createElement('div');
+    tabsContainer.className = 'emoji-tabs';
+    
+    // Add emojis by category
+    const emojiContainer = document.createElement('div');
+    emojiContainer.className = 'emoji-container';
+    
+    // Add first category by default
+    let firstCategory = Object.keys(emojiCategories)[0];
+    let currentEmojis = emojiCategories[firstCategory];
+    
+    // Create tabs for each category
+    Object.keys(emojiCategories).forEach((category, index) => {
+        const tabElement = document.createElement('div');
+        tabElement.className = `emoji-tab ${index === 0 ? 'active' : ''}`;
         
-        // Add click event
-        emojiElement.addEventListener('click', () => {
-            if (messageInput) {
-                messageInput.value += emoji;
-                messageInput.focus();
-            }
-            emojiPicker.style.display = 'none';
+        // Use an icon for each category
+        let tabIcon = '😀'; // Default
+        if (category === 'People & Body') tabIcon = '👋';
+        if (category === 'Animals & Nature') tabIcon = '🐶';
+        if (category === 'Food & Drink') tabIcon = '🍎';
+        if (category === 'Objects') tabIcon = '📱';
+        
+        tabElement.textContent = tabIcon;
+        tabElement.title = category;
+        
+        // Add click event to switch categories
+        tabElement.addEventListener('click', () => {
+            // Remove active class from all tabs
+            document.querySelectorAll('.emoji-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Add active class to clicked tab
+            tabElement.classList.add('active');
+            
+            // Update emojis
+            updateEmojis(emojiCategories[category]);
         });
         
-        // Add emoji to picker
-        emojiPicker.appendChild(emojiElement);
+        tabsContainer.appendChild(tabElement);
     });
+    
+    emojiPicker.appendChild(tabsContainer);
+    emojiPicker.appendChild(emojiContainer);
+    
+    // Function to update emojis in container
+    function updateEmojis(emojis) {
+        emojiContainer.innerHTML = '';
+        
+        emojis.forEach(emoji => {
+            const emojiElement = document.createElement('div');
+            emojiElement.className = 'emoji';
+            emojiElement.textContent = emoji;
+            
+            // Add click event
+            emojiElement.addEventListener('click', () => {
+                if (messageInput) {
+                    messageInput.value += emoji;
+                    messageInput.focus();
+                }
+                emojiPicker.style.display = 'none';
+            });
+            
+            // Add emoji to container
+            emojiContainer.appendChild(emojiElement);
+        });
+    }
+    
+    // Initialize with first category
+    updateEmojis(currentEmojis);
 }
 
 // Initialize the application
