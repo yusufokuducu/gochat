@@ -112,3 +112,5 @@ Users of the GoChat application can:
 ## 📜 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+-_-_-_-_-
