@@ -8,7 +8,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from app.main import app
 from app.db.base import Base, get_db
 from app.core.config import settings
-from app.core.security import create_access_token
+from app.core.security import create_access_token, get_password_hash
 from app.models.user import User
 
 # Use an in-memory SQLite database for testing
@@ -53,11 +53,12 @@ def client(db):
 
 @pytest.fixture(scope="function")
 def test_user(db):
-    # Create a test user
+    # Create a test user with a properly hashed password
+    password_hash = get_password_hash("password")
     user = User(
         username="testuser",
         email="test@example.com",
-        password_hash="$2b$12$tVN1BzXJVS8rlZ6xnrYNWuQllADJY.Fg2r/GZiQX9Jb1ZzJg.EQdq"  # "password"
+        password_hash=password_hash
     )
     db.add(user)
     db.commit()
