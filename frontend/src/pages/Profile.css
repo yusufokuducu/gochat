@@ -1,0 +1,56 @@
+.profile-page {
+  min-height: 100vh;
+  background-color: #f3f4f6;
+}
+
+.profile-card {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
+  margin-top: 2rem;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.profile-card h2 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  color: #4f46e5;
+}
+
+.alert {
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  border-radius: 4px;
+}
+
+.alert-danger {
+  background-color: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.alert-success {
+  background-color: #d1fae5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.profile-info {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.profile-info p {
+  margin: 0.5rem 0;
+  color: #4b5563;
+}
+
+.save-btn {
+  margin-top: 1rem;
+  width: 100%;
+  padding: 0.75rem;
+}
