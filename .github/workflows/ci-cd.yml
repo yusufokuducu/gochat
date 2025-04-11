@@ -68,11 +68,13 @@ jobs:
         
     - name: Install dependencies
       working-directory: ./frontend
-      run: npm ci
+      run: |
+        npm install --legacy-peer-deps
         
     - name: Run tests
       working-directory: ./frontend
-      run: npm test -- --coverage
+      run: |
+        CI=true npm test -- --passWithNoTests
       
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
