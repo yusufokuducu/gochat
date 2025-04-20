@@ -11,8 +11,11 @@ class WebSocketService {
       this.disconnect();
     }
 
-    const wsUrl = `${process.env.REACT_APP_API_URL?.replace('http', 'ws') || 'ws://localhost:8000/api'}/ws/chat/${token}`;
-    this.socket = new WebSocket(wsUrl);
+    // WebSocket URL'i güncellendi - token URL'de değil, protokol olarak gönderiliyor
+    const wsUrl = `${process.env.REACT_APP_API_URL?.replace('http', 'ws') || 'ws://localhost:8000/api'}/ws`;
+    
+    // Token'ı Sec-WebSocket-Protocol header'ında gönderiyoruz
+    this.socket = new WebSocket(wsUrl, [token]);
 
     this.socket.onopen = () => {
       console.log('WebSocket connection established');

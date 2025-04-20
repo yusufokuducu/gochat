@@ -1,6 +1,6 @@
 # GoChat - Real-time Chat Application
 
-GoChat is a modern, real-time chat application built with FastAPI for the backend and React with Material-UI for the frontend.
+GoChat is a modern, real-time chat application built with Go for the backend and React with Material-UI for the frontend.
 
 ## Features
 
@@ -16,17 +16,11 @@ GoChat is a modern, real-time chat application built with FastAPI for the backen
 
 ```
 gochat/
-├── backend/                  # FastAPI backend
-│   ├── alembic/              # Database migrations
-│   ├── app/                  # Application code
-│   │   ├── api/              # API endpoints
-│   │   ├── core/             # Core functionality
-│   │   ├── db/               # Database setup
-│   │   ├── models/           # SQLAlchemy models
-│   │   ├── schemas/          # Pydantic schemas
-│   │   └── services/         # Business logic
-│   ├── Dockerfile            # Backend Docker configuration
-│   └── requirements.txt      # Python dependencies
+├── backend-go/               # Go backend
+│   ├── main.go               # Main application file
+│   ├── go.mod                # Go module definition
+│   ├── go.sum                # Dependencies versions
+│   └── Dockerfile            # Backend Docker configuration
 ├── frontend/                 # React frontend
 │   ├── public/               # Static assets
 │   ├── src/                  # Source code
@@ -46,7 +40,7 @@ gochat/
 
 - Docker and Docker Compose
 - Node.js and npm (for local development)
-- Python 3.9+ (for local development)
+- Go (for local development)
 
 ### Running with Docker
 
@@ -78,23 +72,22 @@ The application is initialized with a default admin user:
 
 1. Navigate to the backend directory:
    ```
-   cd backend
+   cd backend-go
    ```
 
-2. Create a virtual environment:
+2. Initialize the Go module:
    ```
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   go mod init
    ```
 
 3. Install dependencies:
    ```
-   pip install -r requirements.txt
+   go get
    ```
 
-4. Run the FastAPI server:
+4. Run the Go server:
    ```
-   uvicorn app.main:app --reload
+   go run main.go
    ```
 
 #### Frontend
@@ -124,26 +117,26 @@ http://localhost:8000/docs
 To create a new database migration:
 
 ```
-cd backend
-alembic revision --autogenerate -m "Description of changes"
+cd backend-go
+go run migrations/main.go create -m "Description of changes"
 ```
 
 To apply migrations:
 
 ```
-alembic upgrade head
+go run migrations/main.go up
 ```
 
 ## Troubleshooting
 
 ### CORS Issues
 If you encounter CORS issues when the frontend tries to communicate with the backend, ensure that:
-1. The backend CORS settings in `app/main.py` include your frontend origin
+1. The backend CORS settings in `main.go` include your frontend origin
 2. The frontend API URL in `docker-compose.yml` is set to `http://localhost:8000/api`
 
 ### Database Connection
 If the backend cannot connect to the database, check:
-1. The database connection string in `app/core/config.py`
+1. The database connection string in `main.go`
 2. Ensure the PostgreSQL container is running with `docker-compose ps`
 
 ## License

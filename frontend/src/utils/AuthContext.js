@@ -38,15 +38,28 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password) => {
     try {
-      const formData = new FormData();
-      formData.append('username', username);
-      formData.append('password', password);
-
-      const response = await axios.post(`http://localhost:8000/api/auth/login`, formData);
+      const response = await axios.post(`http://localhost:8000/api/auth/login`, {
+        username,
+        password
+      });
+      console.log({username, password, response})
       const { access_token } = response.data;
       
       localStorage.setItem('token', access_token);
       setToken(access_token);
+      
+      // Kullanıcı bilgilerini hemen al
+      try {
+        const userResponse = await axios.get(`http://localhost:8000/api/users/me`, {
+          headers: {
+            Authorization: `Bearer ${access_token}`
+          }
+        });
+        setCurrentUser(userResponse.data);
+      } catch (userError) {
+        console.error('Error fetching user data after login:', userError);
+        return false;
+      }
       
       return true;
     } catch (error) {

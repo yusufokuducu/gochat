@@ -25,6 +25,8 @@ const Login = () => {
       setLoading(true);
       
       const success = await login(username, password);
+
+      console.log('Login response:', success);
       
       if (success) {
         navigate('/chat');

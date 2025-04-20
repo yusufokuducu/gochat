@@ -41,10 +41,9 @@ export const authApi = {
 // Friendship API
 export const friendshipApi = {
   getFriends: (status) => api.get('/friendships', { params: { status } }),
-  getFriendRequests: () => api.get('/friendships/requests'),
-  addFriend: (friendId) => api.post(`/friendships?friend_id=${friendId}`),
-  respondToRequest: (requestId, status) => api.put(`/friendships/requests/${requestId}`, { status: status }),
-  removeFriend: (friendId) => api.delete(`/friendships/${friendId}`),
+  addFriend: (friendId) => api.post('/friendships', { friend_id: friendId }),
+  updateFriendship: (friendshipId, status) => api.put(`/friendships/${friendshipId}`, { status }),
+  removeFriend: (friendshipId) => api.delete(`/friendships/${friendshipId}`),
 };
 
 // Message API

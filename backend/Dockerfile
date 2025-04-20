@@ -1,16 +1,18 @@
-FROM python:3.9-slim
+FROM golang:1.24
 
 WORKDIR /app
 
-COPY requirements.txt .
+# Copy go.mod and go.sum
+COPY go.mod go.sum ./
 
-RUN pip install --no-cache-dir -r requirements.txt && \
-    apt-get update && \
-    apt-get install -y netcat-openbsd && \
-    apt-get clean
+# Download dependencies
+RUN go mod download
 
+# Copy source code
 COPY . .
 
-RUN chmod +x start.sh
+# Expose port
+EXPOSE 8000
 
-CMD ["./start.sh"]
+# Run the application
+CMD ["go", "run", "./cmd/server/main.go"]
