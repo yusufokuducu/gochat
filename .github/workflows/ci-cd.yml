@@ -28,31 +28,28 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Set up Go
+      uses: actions/setup-go@v4
       with:
-        python-version: '3.9'
+        go-version: '1.24'
         
     - name: Install dependencies
       working-directory: ./backend
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-cov
+        go mod download
         
     - name: Run tests
       working-directory: ./backend
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_gochat
         SECRET_KEY: test-secret-key
-        PYTHONPATH: ${{ github.workspace }}/backend
       run: |
-        python -m pytest --cov=app --cov-report=xml
+        go test -v -race -coverprofile=coverage.out ./...
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
-        file: ./backend/coverage.xml
+        file: ./backend/coverage.out
         flags: backend
   
   test-frontend:
@@ -102,28 +99,17 @@ jobs:
   #     with:
   #       username: ${{ secrets.DOCKERHUB_USERNAME }}
   #       password: ${{ secrets.DOCKERHUB_TOKEN }}
-  #       
+  #   
   #   - name: Build and push backend
   #     uses: docker/build-push-action@v4
   #     with:
   #       context: ./backend
   #       push: true
-  #       tags: yourusername/gochat-backend:latest
-  #       
+  #       tags: ${{ secrets.DOCKERHUB_USERNAME }}/gochat-backend:latest
+  #   
   #   - name: Build and push frontend
   #     uses: docker/build-push-action@v4
   #     with:
   #       context: ./frontend
   #       push: true
-  #       tags: yourusername/gochat-frontend:latest
-  #       
-  #   - name: Deploy to server
-  #     uses: appleboy/ssh-action@master
-  #     with:
-  #       host: ${{ secrets.SERVER_HOST }}
-  #       username: ${{ secrets.SERVER_USERNAME }}
-  #       key: ${{ secrets.SERVER_SSH_KEY }}
-  #       script: |
-  #         cd /path/to/deployment
-  #         docker-compose pull
-  #         docker-compose up -d
+  #       tags: ${{ secrets.DOCKERHUB_USERNAME }}/gochat-frontend:latest
