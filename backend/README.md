@@ -42,7 +42,7 @@ backend-go/
 
 1. Projeyi klonlayın:
    ```
-   git clone https://github.com/faust-lvii/gochat.git
+   git clone https://github.com/yusufokuducu/gochat.git
    cd gochat
    ```
 
