@@ -119,7 +119,7 @@ gochat/
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/faust-lvii/gochat.git
+   git clone https://github.com/yusufokuducu/gochat.git
    cd gochat
    ```
 
